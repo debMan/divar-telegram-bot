@@ -45,12 +45,12 @@ def extract_house_data(house):
     if house.get("widget_type") == "POST_ROW":
         data = house["data"]
         print("-> House {}: {}".format(data["token"], data))
-        action_type = data.get("action").get("VIEW_POST")
+        action_type = data.get("action").get("type")
         if action_type == "VIEW_POST":
             district = data["action"]["payload"]["web_info"]["district_persian"]
-            subtitle = ""
-        elif action_type == "'LOAD_MODAL_PAGE'":
-            district = ""
+            subtitle = None
+        elif action_type == "LOAD_MODAL_PAGE":
+            district = None
             subtitle = data["action"]["payload"]["modal_page"]["title"]
         else:
             district = None
