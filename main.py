@@ -46,15 +46,12 @@ def extract_house_data(house):
         data = house["data"]
         print("-> House {}: {}".format(data["token"], data))
         action_type = data.get("action").get("type")
+        subtitle = ""
+        district = ""
         if action_type == "VIEW_POST":
             district = data["action"]["payload"]["web_info"]["district_persian"]
-            subtitle = None
         elif action_type == "LOAD_MODAL_PAGE":
-            district = None
             subtitle = data["action"]["payload"]["modal_page"]["title"]
-        else:
-            district = None
-            subtitle = None
         title = data["title"]
         description = f'{data["top_description_text"]} \n {data["middle_description_text"]} \n {data["bottom_description_text"]} \n {subtitle}'
         hasImage = data["image_count"] > 0
