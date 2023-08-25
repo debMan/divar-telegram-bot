@@ -42,15 +42,19 @@ def get_houses_list(data):
 
 
 def extract_house_data(house):
-    data = house["data"]
-    print("-> House {}: {}".format(data["token"], data))
-    return {
-        "title": data["title"],
-        "description": f'{data["top_description_text"]} \n {data["middle_description_text"]}',
-        "district": data["action"]["payload"]["web_info"]["district_persian"],
-        "hasImage": data["image_count"] > 0,
-        "token": data["token"],
-    }
+    if house.get("widget_type") == "POST_ROW":
+        data = house["data"]
+        print("-> House {}: {}".format(data["token"], data))
+        result = {
+            "title": data["title"],
+            "description": f'{data["top_description_text"]} \n {data["middle_description_text"]}',
+            "district": data["action"]["payload"]["web_info"]["district_persian"],
+            "hasImage": data["image_count"] > 0,
+            "token": data["token"],
+        }
+    else:
+        result = None
+    return result
 
 
 def send_telegram_message(house):
@@ -100,7 +104,6 @@ def process_data(data, tokens):
             continue
         if house_data["token"] in tokens:
             continue
-
         tokens.append(house_data["token"])
         print("sending to telegram token: {}".format(house_data["token"]))
         send_telegram_message(house_data)
