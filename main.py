@@ -45,12 +45,26 @@ def extract_house_data(house):
     if house.get("widget_type") == "POST_ROW":
         data = house["data"]
         print("-> House {}: {}".format(data["token"], data))
+        action_type = data.get("action").get("VIEW_POST")
+        if action_type == "VIEW_POST":
+            district = data["action"]["payload"]["web_info"]["district_persian"]
+            subtitle = ""
+        elif action_type == "'LOAD_MODAL_PAGE'":
+            district = ""
+            subtitle = data["action"]["payload"]["modal_page"]["title"]
+        else:
+            district = None
+            subtitle = None
+        title = data["title"]
+        description = f'{data["top_description_text"]} \n {data["middle_description_text"]} \n {data["bottom_description_text"]} \n {subtitle}'
+        hasImage = data["image_count"] > 0
+        token = data["token"]
         result = {
-            "title": data["title"],
-            "description": f'{data["top_description_text"]} \n {data["middle_description_text"]}',
-            "district": data["action"]["payload"]["web_info"]["district_persian"],
-            "hasImage": data["image_count"] > 0,
-            "token": data["token"],
+            "title": title,
+            "description": description,
+            "district": district,
+            "hasImage": hasImage,
+            "token": token,
         }
     else:
         result = None
@@ -106,7 +120,7 @@ def process_data(data, tokens):
             continue
         tokens.append(house_data["token"])
         print("sending to telegram token: {}".format(house_data["token"]))
-        send_telegram_message(house_data)
+        #send_telegram_message(house_data)
         time.sleep(1)
     return tokens
 
