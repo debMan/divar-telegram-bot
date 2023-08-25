@@ -120,7 +120,7 @@ def process_data(data, tokens):
             continue
         tokens.append(house_data["token"])
         print("sending to telegram token: {}".format(house_data["token"]))
-        #send_telegram_message(house_data)
+        send_telegram_message(house_data)
         time.sleep(1)
     return tokens
 
