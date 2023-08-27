@@ -2,11 +2,13 @@ import datetime
 import json
 import os
 import time
+import re
 
 import requests
 import telegram
 from pydantic import BaseModel
 import asyncio
+from bs4 import BeautifulSoup
 
 
 URL = "https://api.divar.ir/v8/web-search/{SEARCH_CONDITIONS}".format(
@@ -43,6 +45,33 @@ def get_data(page=None):
 def get_ads_list(data):
     return data["web_widgets"]["post_list"]
 
+def get_original_url(url : str) -> str:
+    """
+    this function will removes the parameters from the url.  
+    
+    Example : `https://google.com/example?key=value&key2=value2` -> `https://google.com/example`
+    """
+    # replace with regex
+    url = re.sub('\?.*', '', url)
+    
+    return url
+
+def fetch_ad_data(ad : AD) -> AD:
+    # request to dovar.ir
+    response = requests.get(f'https://divar.ir/v/{ad.token}')
+    soup = BeautifulSoup(response.content, 'html.parser')
+
+    # get images
+    images_field = soup.find(class_="kt-carousel__thumbnails")
+    images = []
+    if images_field:
+        images = images_field.find_all('source')
+    images = [img['srcset'] for img in images]
+    images = [get_original_url(url) for url in images]
+    
+    ad.images = images
+    
+    return ad
 
 def extract_ad_data(ad_data : dict) -> AD:
     # check widget type is post
@@ -60,11 +89,12 @@ def extract_ad_data(ad_data : dict) -> AD:
         subtitle = data["action"]["payload"]["modal_page"]["title"]
     title = data["title"]
     description = f'{data["top_description_text"]} \n {data["middle_description_text"]} \n {data["bottom_description_text"]} \n {subtitle}'
-    images = [img['src'] for img in data['image_url'] ]
     token = data["token"]
     ad = AD(title=title, description=description, district=district,
-            images=images, token=token,
+            images=[], token=token,
             )
+    # fetch more ad data 
+    ad = fetch_ad_data(ad)
     
     return ad
 
@@ -75,9 +105,13 @@ async def send_telegram_message(ad : AD):
     text += f"{ad.description}" + "\n"
     text += f"https://divar.ir/v/a/{ad.token}"
     
-    # send photo
-    if ad.images:
+    # send single photo
+    if len(ad.images) == 1:
         await bot.send_photo(caption=text, photo=ad.images[1], chat_id=BOT_CHATID, parse_mode="HTML")
+    # send album
+    elif len(ad.images) > 1:
+        _media_list = [telegram.InputMediaPhoto(img) for img in ad.images]
+        await bot.send_media_group(caption=text, media=_media_list, chat_id=BOT_CHATID, parse_mode="HTML")
     else:
         # send just text
         await bot.send_message(text=text, chat_id=BOT_CHATID, parse_mode="HTML")
