@@ -1,11 +1,11 @@
 import datetime
 import json
 import os
-import random
 import time
 
 import requests
 import telegram
+from pydantic import BaseModel
 import asyncio
 
 
@@ -24,6 +24,14 @@ TOKENS = list()
 req_proxy = telegram.request.HTTPXRequest(proxy_url=proxy_url)
 bot = telegram.Bot(token=BOT_TOKEN, request=req_proxy)
 
+# AD class model
+class AD(BaseModel):
+    title : str
+    description : str
+    district : str
+    images : list[str] = []
+    token : str
+        
 def get_data(page=None):
     api_url = URL
     if page:
@@ -36,12 +44,12 @@ def get_ads_list(data):
     return data["web_widgets"]["post_list"]
 
 
-def extract_ad_data(ad):
+def extract_ad_data(ad_data : dict) -> AD:
     # check widget type is post
-    if not ad.get("widget_type") == "POST_ROW":
+    if not ad_data.get("widget_type") == "POST_ROW":
         return None
     # extract ad data
-    data = ad["data"]
+    data = ad_data["data"]
     print("-> AD {}: {}".format(data["token"], data))
     action_type = data.get("action").get("type")
     subtitle = ""
@@ -52,31 +60,24 @@ def extract_ad_data(ad):
         subtitle = data["action"]["payload"]["modal_page"]["title"]
     title = data["title"]
     description = f'{data["top_description_text"]} \n {data["middle_description_text"]} \n {data["bottom_description_text"]} \n {subtitle}'
-    hasImage = data["image_count"] > 0
     images = [img['src'] for img in data['image_url'] ]
     token = data["token"]
-    result = {
-        "title": title,
-        "description": description,
-        "district": district,
-        "hasImage": hasImage,
-        "images": images,
-        "token": token,
-    }
+    ad = AD(title=title, description=description, district=district,
+            images=images, token=token,
+            )
     
-    return result
+    return ad
 
 
-async def send_telegram_message(ad):
-    text = f"<b>{ad['title']}</b>" + "\n"
-    text += f"<i>{ad['district']}</i>" + "\n"
-    text += f"{ad['description']}" + "\n"
-    text += f'<i>تصویر : </i> {"✅" if ad["hasImage"] else "❌"}\n\n'
-    text += f"https://divar.ir/v/a/{ad['token']}"
+async def send_telegram_message(ad : AD):
+    text = f"<b>{ad.title}</b>" + "\n"
+    text += f"<i>{ad.district}</i>" + "\n"
+    text += f"{ad.description}" + "\n"
+    text += f"https://divar.ir/v/a/{ad.token}"
     
     # send photo
-    if ad['images']:
-        await bot.send_photo(caption=text, photo=ad['images'][1], chat_id=BOT_CHATID, parse_mode="HTML")
+    if ad.images:
+        await bot.send_photo(caption=text, photo=ad.images[1], chat_id=BOT_CHATID, parse_mode="HTML")
     else:
         # send just text
         await bot.send_message(text=text, chat_id=BOT_CHATID, parse_mode="HTML")
@@ -112,10 +113,10 @@ async def process_data(data, tokens):
         ad_data = extract_ad_data(ad)
         if ad_data is None:
             continue
-        if ad_data["token"] in tokens:
+        if ad_data.token in tokens:
             continue
-        tokens.append(ad_data["token"])
-        print("sending to telegram token: {}".format(ad_data["token"]))
+        tokens.append(ad_data.token)
+        print("sending to telegram token: {}".format(ad_data.token))
         await send_telegram_message(ad_data)
         time.sleep(1)
     return tokens
