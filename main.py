@@ -30,56 +30,53 @@ def get_data(page=None):
         api_url += f"&page={page}"
     response = requests.get(api_url)
     print("{} - Got response: {}".format(datetime.datetime.now(), response.status_code))
-    return response
+    return response.json()
 
-
-def parse_data(data):
-    return json.loads(data.text)
-
-
-def get_houses_list(data):
+def get_ads_list(data):
     return data["web_widgets"]["post_list"]
 
 
-def extract_house_data(house):
-    if house.get("widget_type") == "POST_ROW":
-        data = house["data"]
-        print("-> House {}: {}".format(data["token"], data))
-        action_type = data.get("action").get("type")
-        subtitle = ""
-        district = ""
-        if action_type == "VIEW_POST":
-            district = data["action"]["payload"]["web_info"]["district_persian"]
-        elif action_type == "LOAD_MODAL_PAGE":
-            subtitle = data["action"]["payload"]["modal_page"]["title"]
-        title = data["title"]
-        description = f'{data["top_description_text"]} \n {data["middle_description_text"]} \n {data["bottom_description_text"]} \n {subtitle}'
-        hasImage = data["image_count"] > 0
-        images = [img['src'] for img in data['image_url'] ]
-        token = data["token"]
-        result = {
-            "title": title,
-            "description": description,
-            "district": district,
-            "hasImage": hasImage,
-            "images": images,
-            "token": token,
-        }
-    else:
-        result = None
+def extract_ad_data(ad):
+    # check widget type is post
+    if not ad.get("widget_type") == "POST_ROW":
+        return None
+    # extract ad data
+    data = ad["data"]
+    print("-> AD {}: {}".format(data["token"], data))
+    action_type = data.get("action").get("type")
+    subtitle = ""
+    district = ""
+    if action_type == "VIEW_POST":
+        district = data["action"]["payload"]["web_info"]["district_persian"]
+    elif action_type == "LOAD_MODAL_PAGE":
+        subtitle = data["action"]["payload"]["modal_page"]["title"]
+    title = data["title"]
+    description = f'{data["top_description_text"]} \n {data["middle_description_text"]} \n {data["bottom_description_text"]} \n {subtitle}'
+    hasImage = data["image_count"] > 0
+    images = [img['src'] for img in data['image_url'] ]
+    token = data["token"]
+    result = {
+        "title": title,
+        "description": description,
+        "district": district,
+        "hasImage": hasImage,
+        "images": images,
+        "token": token,
+    }
+    
     return result
 
 
-async def send_telegram_message(house):
-    text = f"<b>{house['title']}</b>" + "\n"
-    text += f"<i>{house['district']}</i>" + "\n"
-    text += f"{house['description']}" + "\n"
-    text += f'<i>تصویر : </i> {"✅" if house["hasImage"] else "❌"}\n\n'
-    text += f"https://divar.ir/v/a/{house['token']}"
+async def send_telegram_message(ad):
+    text = f"<b>{ad['title']}</b>" + "\n"
+    text += f"<i>{ad['district']}</i>" + "\n"
+    text += f"{ad['description']}" + "\n"
+    text += f'<i>تصویر : </i> {"✅" if ad["hasImage"] else "❌"}\n\n'
+    text += f"https://divar.ir/v/a/{ad['token']}"
     
     # send photo
-    if house['hasImage']:
-        await bot.send_photo(caption=text, photo=house['images'][0], chat_id=BOT_CHATID, parse_mode="HTML")
+    if ad['images']:
+        await bot.send_photo(caption=text, photo=ad['images'][1], chat_id=BOT_CHATID, parse_mode="HTML")
     else:
         # send just text
         await bot.send_message(text=text, chat_id=BOT_CHATID, parse_mode="HTML")
@@ -105,22 +102,21 @@ def save_tokns(tokens):
 
 def get_data_page(page=None):
     data = get_data(page)
-    data = parse_data(data)
-    data = get_houses_list(data)
+    data = get_ads_list(data)
     data = data[::-1]
     return data
 
 
 async def process_data(data, tokens):
-    for house in data:
-        house_data = extract_house_data(house)
-        if house_data is None:
+    for ad in data:
+        ad_data = extract_ad_data(ad)
+        if ad_data is None:
             continue
-        if house_data["token"] in tokens:
+        if ad_data["token"] in tokens:
             continue
-        tokens.append(house_data["token"])
-        print("sending to telegram token: {}".format(house_data["token"]))
-        await send_telegram_message(house_data)
+        tokens.append(ad_data["token"])
+        print("sending to telegram token: {}".format(ad_data["token"]))
+        await send_telegram_message(ad_data)
         time.sleep(1)
     return tokens
 
