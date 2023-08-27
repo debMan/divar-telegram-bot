@@ -5,6 +5,9 @@ import random
 import time
 
 import requests
+import telegram
+import asyncio
+
 
 URL = "https://api.divar.ir/v8/web-search/{SEARCH_CONDITIONS}".format(
     **os.environ)
@@ -12,16 +15,14 @@ BOT_TOKEN = "{BOT_TOKEN}".format(**os.environ)
 BOT_CHATID = "{BOT_CHATID}".format(**os.environ)
 SLEEP_SEC = "{SLEEP_SEC}".format(**os.environ)
 
-proxy_config = {}
-if os.environ.get("HTTP_PROXY", ""):
-    proxy_config["HTTP_PROXY"] = os.environ.get("HTTP_PROXY")
-if os.environ.get("HTTPS_PROXY", ""):
-    proxy_config["HTTPS_PROXY"] = os.environ.get("HTTPS_PROXY")
-if os.environ.get("ALL_PROXY", ""):
-    proxy_config["ALL_PROXY"] = os.environ.get("ALL_PROXY")
+proxy_url = None
+if os.environ.get("PROXY_URL", ""):
+    proxy_url = os.environ.get("PROXY_URL")
 
 TOKENS = list()
-
+# setup telegram bot client
+req_proxy = telegram.request.HTTPXRequest(proxy_url=proxy_url)
+bot = telegram.Bot(token=BOT_TOKEN, request=req_proxy)
 
 def get_data(page=None):
     api_url = URL
@@ -69,29 +70,19 @@ def extract_house_data(house):
     return result
 
 
-def send_telegram_message(house):
+async def send_telegram_message(house):
     text = f"<b>{house['title']}</b>" + "\n"
     text += f"<i>{house['district']}</i>" + "\n"
     text += f"{house['description']}" + "\n"
     text += f'<i>تصویر : </i> {"✅" if house["hasImage"] else "❌"}\n\n'
     text += f"https://divar.ir/v/a/{house['token']}"
-    # request parameters
-    body = {"chat_id": BOT_CHATID, "parse_mode": "HTML"}
     
-    # set the sending type : photo or only text
-    method = "sendMessage"
+    # send photo
     if house['hasImage']:
-        method = "sendPhoto"
-        body["photo"] = house['images'][0]
-        body["caption"] = text
+        await bot.send_photo(caption=text, photo=house['images'][0], chat_id=BOT_CHATID, parse_mode="HTML")
     else:
-        body["text"] = text
-    # the message text
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
-    result = requests.post(url, data=body, proxies=proxy_config)
-    if result.status_code == 429:
-        time.sleep(random.randint(3, 7))
-        send_telegram_message(house)
+        # send just text
+        await bot.send_message(text=text, chat_id=BOT_CHATID, parse_mode="HTML")
 
 
 def load_tokens():
@@ -120,7 +111,7 @@ def get_data_page(page=None):
     return data
 
 
-def process_data(data, tokens):
+async def process_data(data, tokens):
     for house in data:
         house_data = extract_house_data(house)
         if house_data is None:
@@ -129,7 +120,7 @@ def process_data(data, tokens):
             continue
         tokens.append(house_data["token"])
         print("sending to telegram token: {}".format(house_data["token"]))
-        send_telegram_message(house_data)
+        await send_telegram_message(house_data)
         time.sleep(1)
     return tokens
 
@@ -142,6 +133,6 @@ if __name__ == "__main__":
     while True:
         for page in pages:
             data = get_data_page(page)
-            tokens = process_data(data, tokens)
+            tokens =  asyncio.run(process_data(data, tokens))
         save_tokns(tokens)
         time.sleep(int(SLEEP_SEC))
