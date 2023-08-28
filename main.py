@@ -43,47 +43,35 @@ def get_data(page=None):
 def get_ads_list(data):
     return data["web_widgets"]["post_list"]
 
-def fetch_ad_data(ad : AD) -> AD:
+def fetch_ad_data(token : str) -> AD:
    
     # send request
-    data = requests.get(f'https://api.divar.ir/v8/posts-v2/web/{ad.token}').json()
+    data = requests.get(f'https://api.divar.ir/v8/posts-v2/web/{token}').json()
     
     # get data 
     for section in data['sections']:
+        # find title section
+        if section['section_name'] == 'TITLE':
+            title = section['widgets'][0]['data']['title']
+            
         # find images section
         if section['section_name'] == 'IMAGE':
             images = section['widgets'][0]['data']['items']
             images = [img['image']['url'] for img in images]
-            ad.images = images
             
         # find description section
         if section['section_name'] == 'DESCRIPTION':
             description = section['widgets'][1]['data']['text']
-            ad.description = description[:800]
-    
-    return ad
-
-def extract_ad_data(ad_data : dict) -> AD:
-    # check widget type is post
-    if not ad_data.get("widget_type") == "POST_ROW":
-        return None
-    # extract ad data
-    data = ad_data["data"]
-    action_type = data.get("action").get("type")
-    district = ""
-    if action_type == "VIEW_POST":
-        district = data["action"]["payload"]["web_info"]["district_persian"]
-    title = data["title"]
-    token = data["token"]
-    ad = AD(title=title, district=district,
-            images=[], token=token,
+            
+    # get district
+    district = data['seo']['web_info']['district_persian']
+        
+    # create ad object
+    ad = AD(token=token, title=title, district=district,
+            description=description, images=images,
             )
-    # fetch more ad data 
-    ad = fetch_ad_data(ad)
-    print("-> AD {}: {}".format(data["token"], vars(ad)))
     
     return ad
-
 
 async def send_telegram_message(ad : AD):
     text = f"<b>{ad.title}</b>" + "\n"
@@ -125,25 +113,25 @@ def save_tokns(tokens):
         json.dump(tokens, outfile)
 
 
-def get_data_page(page=None):
+def get_tokens_page(page=None):
     data = get_data(page)
     data = get_ads_list(data)
     data = data[::-1]
-    return data
-
-
-async def process_data(data, tokens):
-    for ad in data:
-        ad_data = extract_ad_data(ad)
-        if ad_data is None:
-            continue
-        if ad_data.token in tokens:
-            continue
-        tokens.append(ad_data.token)
-        print("sending to telegram token: {}".format(ad_data.token))
-        await send_telegram_message(ad_data)
-        time.sleep(1)
+    # get tokens
+    data = filter(lambda x:x["widget_type"] == "POST_ROW", data)
+    tokens = list(map(lambda x:x['data']['token'], data))
     return tokens
+
+
+async def process_data(tokens):
+    for token in tokens:
+        # get the ad data
+        ad = fetch_ad_data(token)
+        print("AD - {} - {}".format(token, vars(ad)))
+        # send message to telegram
+        print("sending to telegram token: {}".format(ad.token))
+        await send_telegram_message(ad)
+        time.sleep(1)
 
 
 if __name__ == "__main__":
@@ -153,7 +141,10 @@ if __name__ == "__main__":
     pages = [""]
     while True:
         for page in pages:
-            data = get_data_page(page)
-            tokens =  asyncio.run(process_data(data, tokens))
-        save_tokns(tokens)
+            # get new tokens list
+            tokens_list = get_tokens_page(page)
+            # remove repeated tokens
+            tokens_list = list(filter(lambda t: not t in tokens, tokens_list))
+            asyncio.run(process_data(tokens_list))
+        save_tokns(tokens_list)
         time.sleep(int(SLEEP_SEC))
