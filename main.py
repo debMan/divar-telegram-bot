@@ -27,7 +27,7 @@ bot = telegram.Bot(token=BOT_TOKEN, request=req_proxy)
 # AD class model
 class AD(BaseModel):
     title : str
-    description : str
+    description : str = ""
     district : str
     images : list[str] = []
     token : str
@@ -47,13 +47,19 @@ def fetch_ad_data(ad : AD) -> AD:
    
     # send request
     data = requests.get(f'https://api.divar.ir/v8/posts-v2/web/{ad.token}').json()
-    # get images
+    
+    # get data 
     for section in data['sections']:
         # find images section
         if section['section_name'] == 'IMAGE':
             images = section['widgets'][0]['data']['items']
             images = [img['image']['url'] for img in images]
             ad.images = images
+            
+        # find description section
+        if section['section_name'] == 'DESCRIPTION':
+            description = section['widgets'][1]['data']['text']
+            ad.description = description[:800]
     
     return ad
 
@@ -63,22 +69,18 @@ def extract_ad_data(ad_data : dict) -> AD:
         return None
     # extract ad data
     data = ad_data["data"]
-    print("-> AD {}: {}".format(data["token"], data))
     action_type = data.get("action").get("type")
-    subtitle = ""
     district = ""
     if action_type == "VIEW_POST":
         district = data["action"]["payload"]["web_info"]["district_persian"]
-    elif action_type == "LOAD_MODAL_PAGE":
-        subtitle = data["action"]["payload"]["modal_page"]["title"]
     title = data["title"]
-    description = f'{data["top_description_text"]} \n {data["middle_description_text"]} \n {data["bottom_description_text"]} \n {subtitle}'
     token = data["token"]
-    ad = AD(title=title, description=description, district=district,
+    ad = AD(title=title, district=district,
             images=[], token=token,
             )
     # fetch more ad data 
     ad = fetch_ad_data(ad)
+    print("-> AD {}: {}".format(data["token"], vars(ad)))
     
     return ad
 
