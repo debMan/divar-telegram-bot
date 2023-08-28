@@ -27,6 +27,7 @@ bot = telegram.Bot(token=BOT_TOKEN, request=req_proxy)
 # AD class model
 class AD(BaseModel):
     title : str
+    price : int
     description : str = ""
     district : str
     images : list[str] = []
@@ -48,6 +49,10 @@ def fetch_ad_data(token : str) -> AD:
     # send request
     data = requests.get(f'https://api.divar.ir/v8/posts-v2/web/{token}').json()
     
+    # check post exists
+    if not 'sections' in data:
+        return None
+    
     # get data 
     for section in data['sections']:
         # find title section
@@ -65,18 +70,21 @@ def fetch_ad_data(token : str) -> AD:
             
     # get district
     district = data['seo']['web_info']['district_persian']
-        
+    price = data['webengage']['price']
+
     # create ad object
     ad = AD(token=token, title=title, district=district,
-            description=description, images=images,
+            description=description, images=images, price=price,
             )
     
     return ad
 
 async def send_telegram_message(ad : AD):
-    text = f"<b>{ad.title}</b>" + "\n"
-    text += f"<i>{ad.district}</i>" + "\n"
-    text += f"{ad.description}" + "\n"
+    text = f"🗄 <b>{ad.title}</b>" + "\n"
+    text += f"📌 محل آگهی : <i>{ad.district}</i>" + "\n"
+    _price = f"{ad.price:,} تومان" if ad.price else "توافقی"
+    text += f"💰 قیمت : {_price}" + "\n\n"
+    text += f"📄 توضیحات :\n{ad.description}" + "\n"
     text += f"https://divar.ir/v/a/{ad.token}"
     
     # send single photo
