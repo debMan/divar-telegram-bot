@@ -135,6 +135,8 @@ async def process_data(tokens):
     for token in tokens:
         # get the ad data
         ad = fetch_ad_data(token)
+        if not ad:
+            continue
         print("AD - {} - {}".format(token, vars(ad)))
         # send message to telegram
         print("sending to telegram token: {}".format(ad.token))
@@ -153,6 +155,8 @@ if __name__ == "__main__":
             tokens_list = get_tokens_page(page)
             # remove repeated tokens
             tokens_list = list(filter(lambda t: not t in tokens, tokens_list))
+            tokens = list(set(tokens_list + tokens))
             asyncio.run(process_data(tokens_list))
-        save_tokns(tokens_list)
+        # save new tokens 
+        save_tokns(tokens)
         time.sleep(int(SLEEP_SEC))
