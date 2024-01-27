@@ -2,36 +2,28 @@ import datetime
 import json
 import os
 import time
+from typing import Any
+from pathlib import Path
 
 import requests
-import telegram
-from pydantic import BaseModel
 import asyncio
+import telegram
 
+from src.schemas import AD
+from src.telegram import send_telegram_message
 
-URL = "https://api.divar.ir/v8/web-search/{SEARCH_CONDITIONS}".format(**os.environ)
-BOT_TOKEN = "{BOT_TOKEN}".format(**os.environ)
-BOT_CHATID = "{BOT_CHATID}".format(**os.environ)
-SLEEP_SEC = "{SLEEP_SEC}".format(**os.environ)
+URL = "https://api.divar.ir/v8/web-search/{}".format(os.getenv("SEARCH_CONDITIONS"))
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_CHATID = os.getenv("BOT_CHATID")
+SLEEP_SEC = os.getenv("SLEEP_SEC")
 
 proxy_url = None
-if os.environ.get("PROXY_URL", ""):
-    proxy_url = os.environ.get("PROXY_URL")
+if os.getenv("PROXY_URL", ""):
+    proxy_url = os.getenv("PROXY_URL")
 
-TOKENS = list()
 # setup telegram bot client
 req_proxy = telegram.request.HTTPXRequest(proxy_url=proxy_url)
 bot = telegram.Bot(token=BOT_TOKEN, request=req_proxy)
-
-
-# AD class model
-class AD(BaseModel):
-    title: str
-    price: int
-    description: str = ""
-    district: str
-    images: list[str] = []
-    token: str
 
 
 def get_data(page=None):
@@ -41,10 +33,6 @@ def get_data(page=None):
     response = requests.get(api_url)
     print("{} - Got response: {}".format(datetime.datetime.now(), response.status_code))
     return response.json()
-
-
-def get_ads_list(data):
-    return data["web_widgets"]["post_list"]
 
 
 def fetch_ad_data(token: str) -> AD:
@@ -87,42 +75,19 @@ def fetch_ad_data(token: str) -> AD:
     return ad
 
 
-async def send_telegram_message(ad: AD):
-    text = f"🗄 <b>{ad.title}</b>" + "\n"
-    text += f"📌 محل آگهی : <i>{ad.district}</i>" + "\n"
-    _price = f"{ad.price:,} تومان" if ad.price else "توافقی"
-    text += f"💰 قیمت : {_price}" + "\n\n"
-    text += f"📄 توضیحات :\n{ad.description}" + "\n"
-    text += f"https://divar.ir/v/a/{ad.token}"
-
-    # send single photo
-    if len(ad.images) == 1:
-        await bot.send_photo(
-            caption=text, photo=ad.images[0], chat_id=BOT_CHATID, parse_mode="HTML"
-        )
-    # send album
-    elif len(ad.images) > 1:
-        _media_list = [telegram.InputMediaPhoto(img) for img in ad.images[:10]]
-        try:
-            await bot.send_media_group(
-                caption=text, media=_media_list, chat_id=BOT_CHATID, parse_mode="HTML"
-            )
-        except telegram.error.BadRequest as e:
-            print("Error sending photos :", e)
-            return
-    else:
-        # send just text
-        await bot.send_message(text=text, chat_id=BOT_CHATID, parse_mode="HTML")
-
-
-def load_tokens():
-    token_path = os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), "tokens.json"
-    )
-    with open(token_path, "r") as content:
-        if content == "":
-            return []
-        return json.load(content)
+def load_tokens() -> list[str]:
+    # load tokens list from json file
+    token_path = Path("tokens.json")
+    try:
+        with open(token_path) as file:
+            content = file.read()
+    except FileNotFoundError:
+        return []
+    # check empty list
+    if not content:
+        return []
+    # parse json
+    return json.loads(content)
 
 
 def save_tokns(tokens):
@@ -133,9 +98,9 @@ def save_tokns(tokens):
         json.dump(tokens, outfile)
 
 
-def get_tokens_page(page=None):
+def get_tokens_page(page=None) -> list[Any]:
     data = get_data(page)
-    data = get_ads_list(data)
+    data = data["web_widgets"]["post_list"]
     data = data[::-1]
     # get tokens
     data = filter(lambda x: x["widget_type"] == "POST_ROW", data)
@@ -152,7 +117,7 @@ async def process_data(tokens):
         print("AD - {} - {}".format(token, vars(ad)))
         # send message to telegram
         print("sending to telegram token: {}".format(ad.token))
-        await send_telegram_message(ad)
+        await send_telegram_message(bot=bot, user_chat_id=BOT_CHATID, ad=ad)
         time.sleep(1)
 
 
