@@ -73,4 +73,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.DOCKERHUB_IMAGE_NAME }}
+          enable-url-completion: true
           short-description: ${{ github.event.repository.description }}
