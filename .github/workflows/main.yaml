@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - main
+      - master
       - develop
     tags:
       -  v*
   pull_request:
     branches: 
       - main
+      - master
       - develop
 
 env:
@@ -22,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'push' &&
-      github.ref == 'refs/heads/develop'
+      ( github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' )
     permissions:
       contents: read
       packages: write
